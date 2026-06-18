@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local runtime cache — may contain account usage data, never commit
+sysclaude_usage.json
+*_ck
+*.cookies
+
+# Never commit anything that could carry a session key / cookies / org id
+*cookie*
+*session*
+.secrets
