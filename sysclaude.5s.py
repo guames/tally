@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 
 CLAUDE_COOKIES = os.path.expanduser("~/Library/Application Support/Claude/Cookies")
 USAGE_CACHE = "/tmp/sysclaude_usage.json"
-USAGE_TTL = 60  # seconds — Claude usage refresh cadence (system metrics refresh every 5s)
+USAGE_TTL = 300  # seconds — Claude usage refresh cadence (system metrics refresh every 5s)
 WARN, CRIT = 80, 92  # % thresholds for color
 
 
