@@ -5,13 +5,18 @@ A customizable macOS **menu bar dashboard**, built as a single, auditable
 compiled app. It puts the metrics you care about into one menu bar item and is
 meant to **grow** as you add widgets.
 
-Today it ships three:
+Today it ships four:
 
 - **Claude** — Pro/Max plan usage: 5-hour **session** % and 7-day **weekly** %,
   with reset times (the same numbers as *Settings → Usage* in the Claude app).
 - **System** — RAM, CPU, and **temperature**.
 - **Ember** — control a local [Ember](https://github.com/guames/ember) MLX
   inference router: see the current model, warm/unload models, open status.
+- **Ledger** — flip Claude Code between routing through the local
+  [Ledger](https://github.com/guames/ledger) proxy and talking to Anthropic
+  **directly**, in one click. A panic button: if the proxy misbehaves, switch to
+  Direct and your next Claude session works normally. Shows proxy on/off and
+  whether the gateway is live, and can start/stop the gateway.
 
 ```
 menu bar:   [S 17%] [W 53%]   10.4/24GB   🌡 37°
@@ -39,6 +44,7 @@ limits, and your local LLM router at the same time.
 | Temperature | [`macmon`](https://github.com/vladkens/macmon) — Apple Silicon sensors, **no sudo** |
 | Claude usage | the claude.ai session cookie from the **Claude desktop app's local cookie store**, used to call the same usage endpoint the web app uses |
 | Ember | HTTP to the local router (`127.0.0.1:8000`) |
+| Ledger | TCP liveness of the gateway (`127.0.0.1:8787`) + the `env.ANTHROPIC_BASE_URL` key in `~/.claude/settings.json` (the switch writes only that key, preserving everything else) |
 
 For Claude usage it:
 
