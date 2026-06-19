@@ -40,6 +40,17 @@ WARN, CRIT = 80, 92  # % thresholds for color
 EMBER_URL = f"http://{os.environ.get('MLX_ROUTER_HOST', '127.0.0.1')}:{os.environ.get('MLX_ROUTER_PORT', '8000')}"
 EMBER_BIN = "/opt/homebrew/bin/ember"
 
+# Ledger — anthropic-compatible proxy that sits between Claude Code and the API
+# (github.com/guames/ledger). The switch below flips Claude Code between routing
+# through the proxy and talking to Anthropic directly — so if the proxy misbehaves
+# you can switch off and keep working. The lever is the `env.ANTHROPIC_BASE_URL`
+# key in the global Claude Code settings, which Claude reads on each NEW session.
+LEDGER_BIN = "/opt/homebrew/bin/ledger"
+LEDGER_HOST = os.environ.get("LEDGER_HOST", "127.0.0.1")
+LEDGER_PORT = int(os.environ.get("LEDGER_PORT", "8787"))
+LEDGER_URL = f"http://{LEDGER_HOST}:{LEDGER_PORT}"
+CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
+
 # ---- look & feel (menu bar) ----
 BAR_FULL, BAR_EMPTY, BAR_NONE = "▓", "░", "·"  # smooth shaded progress bar
 CAP_L, CAP_R = "⟮", "⟯"                          # rounded end-caps
@@ -442,6 +453,127 @@ def ember_section():
     print(f"Status in terminal | bash={EMBER_BIN} param1=status terminal=true")
 
 
+# ---------------------------------------------------------------- Ledger proxy
+def _ledger_up():
+    """True if something is listening on the gateway port (best-effort liveness)."""
+    import socket
+
+    try:
+        with socket.create_connection((LEDGER_HOST, LEDGER_PORT), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
+def _read_settings():
+    """Parse the global Claude settings, or None if missing/unreadable.
+    Never fabricate — a None means 'don't touch', so we can't corrupt the file."""
+    try:
+        with open(CLAUDE_SETTINGS) as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _proxy_active(settings):
+    """True if Claude Code is currently configured to route through the gateway."""
+    if not isinstance(settings, dict):
+        return False
+    return (settings.get("env") or {}).get("ANTHROPIC_BASE_URL") == LEDGER_URL
+
+
+def _set_proxy(on):
+    """Flip the env.ANTHROPIC_BASE_URL key in the Claude settings, atomically,
+    preserving every other key (hooks, permissions, …). No-op if unreadable."""
+    settings = _read_settings()
+    if settings is None:
+        return
+    env = settings.get("env")
+    if not isinstance(env, dict):
+        env = {}
+    if on:
+        env["ANTHROPIC_BASE_URL"] = LEDGER_URL
+    else:
+        env.pop("ANTHROPIC_BASE_URL", None)
+    if env:
+        settings["env"] = env
+    else:
+        settings.pop("env", None)  # leave the file clean when nothing is left
+    tmp = CLAUDE_SETTINGS + ".tally.tmp"
+    with open(tmp, "w") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, CLAUDE_SETTINGS)
+
+
+def _start_gateway():
+    subprocess.Popen(
+        [LEDGER_BIN, "gateway", "--host", LEDGER_HOST, "--port", str(LEDGER_PORT)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL, start_new_session=True,
+    )
+
+
+def _stop_gateway():
+    import signal
+
+    out = subprocess.run(
+        ["lsof", "-ti", f"tcp:{LEDGER_PORT}"], capture_output=True, text=True,
+    ).stdout.split()
+    for pid in out:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except (ValueError, ProcessLookupError, PermissionError):
+            pass
+
+
+def ledger_action(verb):
+    """Invoked when SwiftBar re-runs us with param1=ledger. Flips the switch."""
+    if verb == "proxy":
+        if not _ledger_up():
+            _start_gateway()
+        _set_proxy(True)
+    elif verb == "direct":
+        _set_proxy(False)
+    elif verb == "start":
+        _start_gateway()
+    elif verb == "stop":
+        _stop_gateway()
+
+
+def ledger_section():
+    """Prints the Ledger dropdown: proxy on/off + gateway up/down + toggles."""
+    me = os.path.realpath(__file__)
+    settings = _read_settings()
+    up = _ledger_up()
+    active = _proxy_active(settings)
+    print("---")
+    print("Ledger — proxy | size=13")
+    if settings is None:
+        print("Claude settings.json unreadable | color=red font=Menlo")
+        return
+    # status line — green when consistent, RED when the proxy is selected but down
+    if active and up:
+        print(f"● Proxy ON — Claude → gateway :{LEDGER_PORT} | color=green font=Menlo")
+    elif active and not up:
+        print("▲ Proxy ON but gateway DOWN — switch to Direct! | color=red font=Menlo")
+    else:
+        print("○ Direct — Claude → Anthropic | color=gray font=Menlo")
+    # the switch (one-click; switching to proxy also starts the gateway if needed)
+    if active:
+        print(f"Switch to DIRECT (bypass proxy) | bash={me} param1=ledger param2=direct "
+              "terminal=false refresh=true")
+    else:
+        print(f"Switch to PROXY (via gateway) | bash={me} param1=ledger param2=proxy "
+              "terminal=false refresh=true")
+    # gateway process control (sibling of the switch)
+    if up:
+        print(f"Stop gateway | bash={me} param1=ledger param2=stop terminal=false refresh=true")
+    else:
+        print(f"Start gateway | bash={me} param1=ledger param2=start terminal=false refresh=true")
+    print("Takes effect in NEW Claude sessions | size=11 color=gray")
+
+
 def _dur(s):
     if s is None or s < 0:
         return "∞"
@@ -523,6 +655,9 @@ def main():
     # ---- Ember section ----
     ember_section()
 
+    # ---- Ledger section ----
+    ledger_section()
+
     print("---")
     print("Open usage on claude.ai | href=https://claude.ai/settings/usage")
     print("Refresh | refresh=true")
@@ -534,6 +669,12 @@ if __name__ == "__main__":
             refresh_usage_cache()
         except Exception:  # noqa: BLE001
             pass
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "ledger":
+        try:
+            ledger_action(sys.argv[2] if len(sys.argv) > 2 else "")
+        except Exception as e:  # noqa: BLE001
+            print(e)
         sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "ember":
         try:

@@ -17,12 +17,15 @@ Tally is a **customizable macOS menu bar dashboard**. It puts a small set of
 "widgets" into a single menu bar item and a dropdown, and is designed to **grow**
 — new widgets can be added without changing the existing ones.
 
-Today it ships three widgets:
+Today it ships four widgets:
 
 1. **Claude** — Anthropic Pro/Max plan usage (5-hour session and 7-day weekly).
 2. **System** — RAM, CPU, temperature.
 3. **Ember** — control surface for a local [Ember](https://github.com/guames/ember)
    MLX inference router (current model, warm, unload).
+4. **Ledger** — a switch that flips Claude Code between the local
+   [Ledger](https://github.com/guames/ledger) proxy and Anthropic-direct, with
+   gateway start/stop.
 
 ## 2. Goals & non-goals
 
@@ -51,6 +54,7 @@ Today it ships three widgets:
   printing a menu. Verbs:
   - `fetch-usage` → refresh the Claude cache (background worker).
   - `ember <action> <arg>` → call the Ember router (warm / unload).
+  - `ledger <action>` → flip the proxy switch (proxy / direct) or start/stop the gateway.
 - **Optional dependency degradation.** Image rendering needs Pillow; if Pillow is
   unavailable, `HAVE_PIL` is false and the menu bar falls back to a unicode bar.
 
@@ -99,7 +103,8 @@ Sections, in order, separated by `---`:
    - `Temp: <n>°C` — a **single** value, `max(cpu, gpu)` (the two Apple Silicon
      sensors track within ~1–2°C; one value is enough). `unavailable` if no macmon.
 3. **Ember** (see §4.4)
-4. Footer: `Open usage on claude.ai` (link), `Refresh`.
+4. **Ledger** (see §4.6)
+5. Footer: `Open usage on claude.ai` (link), `Refresh`.
 
 All dropdown text is **English**.
 
@@ -123,6 +128,33 @@ All dropdown text is **English**.
 - (`clear` is implemented but omitted from the menu while the production router is
   the bench `mlx_router.py`, which lacks `/clear`. Re-enable under `ember serve`.)
 
+### 4.6 Ledger widget (`ledger_section`)
+
+- Header `Ledger — proxy`.
+- **Status line**, from two reads — the gateway's TCP liveness (`LEDGER_HOST:LEDGER_PORT`)
+  and whether `env.ANTHROPIC_BASE_URL` in `~/.claude/settings.json` equals `LEDGER_URL`:
+  - proxy selected **and** gateway up → `● Proxy ON — Claude → gateway` (green).
+  - proxy selected **but** gateway down → `▲ Proxy ON but gateway DOWN — switch to Direct!` (red).
+  - proxy not selected → `○ Direct — Claude → Anthropic` (gray).
+  - settings unreadable → a single red line; no toggle is offered (never corrupt the file).
+- **The switch** (one top-level item, label depends on current state): `Switch to PROXY`
+  / `Switch to DIRECT`. Switching to proxy also starts the gateway if it is down.
+- **Gateway control** (sibling): `Start gateway` / `Stop gateway`.
+- Footer note: `Takes effect in NEW Claude sessions` — the switch writes settings that
+  Claude Code reads at session start; it does not retro-fit the running session.
+- Config: `LEDGER_URL` (default `http://127.0.0.1:8787`, override via `LEDGER_HOST`/
+  `LEDGER_PORT`), `LEDGER_BIN`, `CLAUDE_SETTINGS`.
+
+### 4.7 Ledger actions (`ledger_action`)
+
+- `proxy` → start the gateway if down, then set `env.ANTHROPIC_BASE_URL = LEDGER_URL`.
+- `direct` → remove `env.ANTHROPIC_BASE_URL` (and drop an empty `env`).
+- `start` / `stop` → launch `ledger gateway` detached / `SIGTERM` whatever listens on
+  `LEDGER_PORT` (via `lsof -ti`).
+- Settings edits are **atomic** (temp file + `os.replace`) and **key-preserving**: only
+  the one env key is touched; `hooks`, `permissions`, etc. are untouched. A missing or
+  unparseable settings file is a no-op (read returns `None`).
+
 ## 5. Data sources
 
 | Metric | Source |
@@ -131,6 +163,7 @@ All dropdown text is **English**.
 | Temperature | `macmon pipe` (Apple Silicon sensors, no sudo) at `/opt/homebrew/bin/macmon` |
 | Claude usage | claude.ai usage endpoint, authenticated with the local Claude desktop app session cookie (see §6) |
 | Ember | HTTP to the local router |
+| Ledger | TCP liveness of the gateway port + the `env.ANTHROPIC_BASE_URL` key in `~/.claude/settings.json` |
 
 ## 6. Claude usage acquisition
 
@@ -186,6 +219,7 @@ gracefully (the rest keeps working) if so.
 - `BATT_OUTLINE`, `BATT_FILL` — battery glyph colours.
 - `MENUBAR_BAR_H`, `MENUBAR_PILL_H` — bar image height vs body thickness.
 - `EMBER_URL`, `EMBER_BIN` (+ `MLX_ROUTER_HOST`/`MLX_ROUTER_PORT`).
+- `LEDGER_URL`, `LEDGER_BIN`, `CLAUDE_SETTINGS` (+ `LEDGER_HOST`/`LEDGER_PORT`).
 
 ## 10. Extensibility (adding a widget)
 
@@ -210,6 +244,9 @@ dropdown section. To add one:
   text turns orange above 50% and red above 85%.
 - Ember submenu lists chat models only; warming one makes it show as "Current
   model" on the next refresh; unload clears it.
+- Ledger switch is idempotent and round-trips: `proxy` then `direct` returns
+  `~/.claude/settings.json` to its prior content with `hooks`/`permissions` intact;
+  the status line reflects the live gateway + selected route on the next refresh.
 - After uninstalling/clearing, no cookie or session material is left on disk.
 - The codebase carries no references to the project's former name (rename complete).
 
