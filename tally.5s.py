@@ -61,28 +61,16 @@ try:
 except Exception:  # noqa: BLE001
     HAVE_PIL = False
 
-# fill gradient (top→bottom) per usage band — dusty / desaturated, low vibrance.
-GREEN  = [(126, 158, 132), (100, 138, 110), (82, 120, 94)]
-YELLOW = [(200, 184, 134), (182, 162, 104), (158, 138, 84)]
-RED    = [(190, 134, 120), (170, 104, 92), (146, 80, 70)]
-GRAYPAL = [(150, 150, 156), (130, 130, 136)]       # used when % is unknown
-TRACK_GRAY = [(92, 92, 98), (74, 74, 80)]          # neutral, subtle track
+# Menu bar bars mimic the macOS battery glyph: a light outline + a neutral fill,
+# monochrome so they sit in with the native menu bar icons (no clashing colour,
+# no battery "nub"). S and W look identical, only the fill level differs.
+BATT_OUTLINE = (196, 196, 202)
+BATT_FILL = [(176, 176, 182), (150, 150, 156)]
 WHITE = (255, 255, 255)
 ROUND_FONT = "/System/Library/Fonts/SFNSRounded.ttf"
 
-# usage bands (the % thresholds): green ≤50, yellow ≤85, red after
+# usage bands (the % thresholds) — used to colour the dropdown text (band_color)
 GREEN_MAX, YELLOW_MAX = 50, 85
-
-
-def _palette_for(pct):
-    """fill gradient stops by usage band."""
-    if pct is None:
-        return GRAYPAL
-    if pct <= GREEN_MAX:
-        return GREEN
-    if pct <= YELLOW_MAX:
-        return YELLOW
-    return RED
 
 
 def _vgrad(w, h, stops):
@@ -103,38 +91,35 @@ def _rmask(w, h, r):
 
 
 def _draw_bar(pct, H, W, S, bar_text, pill_h=None):
-    """Pill bar: coloured outer ring + white border + gray track + rounded fill
-    (green/yellow/red by band), % centered. The pill occupies `pill_h` (≤ H),
-    vertically centered, while the % font is sized from the full image height —
-    so the bar can be slim without shrinking the number. Supersampled RGBA."""
-    stops = _palette_for(pct)
+    """macOS-battery-style glyph: a rounded outline (no nub) + a neutral fill at
+    the % level + the % centered inside. Monochrome (S and W look identical). The
+    body occupies `pill_h` (≤ H), centered; the % font is sized from the full
+    image height so the body can stay slim. Supersampled RGBA."""
     if pill_h is None:
         pill_h = H
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    py = (H - pill_h) // 2          # pill top offset (centered)
-    m = S
-    th = pill_h - 2 * m
-    tx, ty = m, py + m
-    tw = W - 2 * m
-    trad = th // 2
-    # neutral gray track (subtle, no border)
-    img.paste(_vgrad(tw, th, TRACK_GRAY), (tx, ty), _rmask(tw, th, trad))
-    # rounded fill pill
+    py = (H - pill_h) // 2
+    rad = int(pill_h * 0.34)               # battery-like rounded rectangle (not a pill)
+    sw = max(2, int(pill_h * 0.11))        # outline thickness
+    # battery body — outline only, no fill, no nub
+    d.rounded_rectangle([sw // 2, py + sw // 2, W - 1 - sw // 2, py + pill_h - 1 - sw // 2],
+                        radius=rad, outline=BATT_OUTLINE, width=sw)
+    # interior (inset from the outline, like the gap inside a battery)
+    gap = sw + max(1, S)
+    ix, iy = gap, py + gap
+    iw, ih = W - 2 * gap, pill_h - 2 * gap
+    irad = max(1, int(ih * 0.30))
     p = max(0, min(100, pct if pct is not None else 0)) / 100
-    fw = int(tw * p)
+    fw = int(iw * p)
     if fw > 1:
-        img.paste(_vgrad(fw, th, stops), (tx, ty), _rmask(fw, th, trad))
-        gh, gx = int(th * 0.30), trad // 2
-        if fw - 2 * gx > 2:
-            img.paste(Image.new("RGBA", (fw - 2 * gx, gh), (255, 255, 255, 45)),
-                      (tx + gx, ty + int(th * 0.16)), _rmask(fw - 2 * gx, gh, gh // 2))
-    # centered percentage (font from image height, independent of pill thickness)
+        img.paste(_vgrad(fw, ih, BATT_FILL), (ix, iy), _rmask(fw, ih, irad))
+    # centered percentage (white, thin dark stroke so it reads over fill or empty)
     if bar_text:
         f = ImageFont.truetype(ROUND_FONT, int(H * 0.56))
         tb = d.textbbox((0, 0), bar_text, font=f)
         d.text((W / 2 - (tb[2] - tb[0]) / 2 - tb[0], H / 2 - (tb[3] - tb[1]) / 2 - tb[1]),
-               bar_text, font=f, fill=(238, 238, 240), stroke_width=max(1, S), stroke_fill=(48, 48, 52))
+               bar_text, font=f, fill=(245, 245, 247), stroke_width=max(1, S), stroke_fill=(36, 36, 40))
     return img
 
 
