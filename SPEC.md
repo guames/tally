@@ -104,14 +104,28 @@ Sections, in order, separated by `---`:
      sensors track within ~1–2°C; one value is enough). `unavailable` if no macmon.
 3. **Ember** (see §4.4)
 4. **Ledger** (see §4.6)
-5. Footer: `Open usage on claude.ai` (link), `Refresh`.
+5. Footer: `Open usage on claude.ai` (link, **Claude only**), `Refresh`.
+
+**Presence rule.** A widget's section (and its separator) is rendered **only when
+its tool is present**; otherwise it is omitted entirely — no "unavailable"
+placeholder. Presence:
+- **Claude** — the desktop app's cookie store exists (`CLAUDE_COOKIES`).
+- **Ember** — the CLI is installed (`EMBER_BIN`) **or** the router responds.
+- **Ledger** — the CLI is installed (`LEDGER_BIN`) **or** the gateway is up.
+
+A tool that is installed but **not running** still shows (with its offline state +
+`Start` action); a tool that isn't installed at all is hidden. **System always
+shows** (no external dependency) and anchors the dropdown when Claude is hidden.
 
 All dropdown text is **English**.
 
 ### 4.4 Ember widget (`ember_section`)
 
 - Header `Ember — router`.
-- If the router does not respond: `router offline` + `Start (ember serve)`.
+- **Hidden entirely** when Ember is absent (CLI not at `EMBER_BIN` **and** router
+  not responding) — see the presence rule in §4.3.
+- If the router does not respond but the CLI is installed: `router offline` +
+  `Start (ember serve)`.
 - **Current model:** the hot chat model(s) from `GET /status` → `loaded.chat`
   (name, size, idle), green; `none (cold)` if none are loaded.
 - **Warm model** submenu: every chat model from `GET /v1/models`
@@ -131,6 +145,8 @@ All dropdown text is **English**.
 ### 4.6 Ledger widget (`ledger_section`)
 
 - Header `Ledger — proxy`.
+- **Hidden entirely** when Ledger is absent (CLI not at `LEDGER_BIN` **and** gateway
+  not up) — see the presence rule in §4.3.
 - **Status line**, from two reads — the gateway's TCP liveness (`LEDGER_HOST:LEDGER_PORT`)
   and whether `env.ANTHROPIC_BASE_URL` in `~/.claude/settings.json` equals `LEDGER_URL`:
   - proxy selected **and** gateway up → `● Proxy ON — Claude → gateway` (green).
@@ -247,6 +263,9 @@ dropdown section. To add one:
 - Ledger switch is idempotent and round-trips: `proxy` then `direct` returns
   `~/.claude/settings.json` to its prior content with `hooks`/`permissions` intact;
   the status line reflects the live gateway + selected route on the next refresh.
+- Presence rule: with a tool absent (Claude app / Ember CLI+router / Ledger
+  CLI+gateway), its section and separator are omitted; System still renders and the
+  dropdown stays well-formed. An installed-but-stopped tool still shows its `Start`.
 - After uninstalling/clearing, no cookie or session material is left on disk.
 - The codebase carries no references to the project's former name (rename complete).
 

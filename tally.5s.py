@@ -421,9 +421,12 @@ def ember_action(verb, arg):
 
 
 def ember_section():
-    """Prints the Ember dropdown section: current model + warm/unload/clear menu."""
+    """Prints the Ember dropdown section: current model + warm/unload/clear menu.
+    Hidden entirely when Ember isn't present — CLI not installed AND router down."""
     me = os.path.realpath(__file__)
     st = _ember_get("/status")
+    if st is None and not os.path.exists(EMBER_BIN):
+        return  # not installed and not running — don't show the section at all
     print("---")
     print("Ember — router | size=13")
     if st is None:
@@ -542,10 +545,13 @@ def ledger_action(verb):
 
 
 def ledger_section():
-    """Prints the Ledger dropdown: proxy on/off + gateway up/down + toggles."""
+    """Prints the Ledger dropdown: proxy on/off + gateway up/down + toggles.
+    Hidden entirely when Ledger isn't present — CLI not installed AND gateway down."""
     me = os.path.realpath(__file__)
-    settings = _read_settings()
     up = _ledger_up()
+    if not up and not os.path.exists(LEDGER_BIN):
+        return  # not installed and not running — don't show the section at all
+    settings = _read_settings()
     active = _proxy_active(settings)
     print("---")
     print("Ledger — proxy | size=13")
@@ -594,7 +600,10 @@ def main():
     ram_str = f"{ICON_RAM} {vbar(ram_pct)} {ram_used:.1f}/{ram_total:.0f}GB"  # usado/total
     cpu = psutil.cpu_percent(interval=0.3)
     cpu_t, gpu_t = macmon_temp()
-    u = claude_usage_cached()
+    # Hide a widget entirely when its tool isn't present (rather than show an
+    # "unavailable" placeholder). Claude = the desktop app's cookie store exists.
+    claude_present = os.path.exists(CLAUDE_COOKIES)
+    u = claude_usage_cached() if claude_present else None
 
     temps = [t for t in (cpu_t, gpu_t) if t is not None]
     temp_one = max(temps) if temps else None
@@ -619,29 +628,30 @@ def main():
         print(f"{ram_t} ⚙️{cpu:.0f}% {THERMO}{temp_str}")
     print("---")
 
-    # ---- Claude section ----
-    print("Claude — Pro | size=13")
-    if u:
-        s, w = u.get("session"), u.get("weekly")
-        sr, wr = fmt_reset(u.get("session_reset")), fmt_reset(u.get("weekly_reset"))
-        sv = f"{s}%" if s is not None else "—"
-        wv = f"{w}%" if w is not None else "—"
-        print(f"S  Session 5h: {sv}  ·  resets {sr} | font=Menlo"
-              + (f" color={band_color(s)}" if band_color(s) else ""))
-        print(f"W  Weekly:    {wv}  ·  resets {wr} | font=Menlo"
-              + (f" color={band_color(w)}" if band_color(w) else ""))
-        extra = []
-        if u.get("opus") is not None:
-            extra.append(f"Opus 7d {u['opus']}%")
-        if u.get("sonnet") is not None:
-            extra.append(f"Sonnet 7d {u['sonnet']}%")
-        if extra:
-            print("  " + "   ".join(extra) + " | font=Menlo size=11 color=gray")
-    else:
-        print("unavailable (app closed / session expired?) | color=gray")
-    print("---")
+    # ---- Claude section (hidden if the Claude desktop app isn't present) ----
+    if claude_present:
+        print("Claude — Pro | size=13")
+        if u:
+            s, w = u.get("session"), u.get("weekly")
+            sr, wr = fmt_reset(u.get("session_reset")), fmt_reset(u.get("weekly_reset"))
+            sv = f"{s}%" if s is not None else "—"
+            wv = f"{w}%" if w is not None else "—"
+            print(f"S  Session 5h: {sv}  ·  resets {sr} | font=Menlo"
+                  + (f" color={band_color(s)}" if band_color(s) else ""))
+            print(f"W  Weekly:    {wv}  ·  resets {wr} | font=Menlo"
+                  + (f" color={band_color(w)}" if band_color(w) else ""))
+            extra = []
+            if u.get("opus") is not None:
+                extra.append(f"Opus 7d {u['opus']}%")
+            if u.get("sonnet") is not None:
+                extra.append(f"Sonnet 7d {u['sonnet']}%")
+            if extra:
+                print("  " + "   ".join(extra) + " | font=Menlo size=11 color=gray")
+        else:
+            print("unavailable (app closed / session expired?) | color=gray")
+        print("---")
 
-    # ---- system section ----
+    # ---- system section (always shown — core, no external dependency) ----
     print("System | size=13")
     print(f"RAM:  {ram_used:.1f} / {ram_total:.0f} GB  ({ram_pct:.0f}%) | font=Menlo"
           + (f" color={band_color(ram_pct)}" if band_color(ram_pct) else ""))
@@ -659,7 +669,8 @@ def main():
     ledger_section()
 
     print("---")
-    print("Open usage on claude.ai | href=https://claude.ai/settings/usage")
+    if claude_present:
+        print("Open usage on claude.ai | href=https://claude.ai/settings/usage")
     print("Refresh | refresh=true")
 
 

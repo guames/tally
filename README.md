@@ -18,6 +18,12 @@ Today it ships four:
   next Claude session works normally. Shows proxy on/off and whether the gateway
   is live, and can start/stop the gateway.
 
+Widgets you don't use stay out of your way: a section is shown **only when its
+tool is present** — Claude (the desktop app), Ember (CLI installed or router
+running), Ledger (CLI installed or gateway running). A tool that's installed but
+stopped still shows (with its *Start* action); one that isn't installed at all is
+hidden entirely. **System** (RAM/CPU/temp) is always shown.
+
 ```
 menu bar:   [S 17%] [W 53%]   10.4/24GB   🌡 37°
 ```
