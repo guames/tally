@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# sysclaude installer — sets up the unified menu bar widget.
+# tally installer — sets up the customizable menu bar dashboard.
 set -euo pipefail
 
-PLUGIN_DIR="${SYSCLAUDE_PLUGIN_DIR:-$HOME/.config/swiftbar-plugins}"
-SRC="$(cd "$(dirname "$0")" && pwd)/sysclaude.5s.py"
+PLUGIN_DIR="${TALLY_PLUGIN_DIR:-$HOME/.config/swiftbar-plugins}"
+SRC="$(cd "$(dirname "$0")" && pwd)/tally.5s.py"
 
 echo "==> Python deps (for /usr/bin/python3)"
-/usr/bin/python3 -m pip install --user -q psutil cryptography curl_cffi
+/usr/bin/python3 -m pip install --user -q psutil cryptography curl_cffi Pillow
 
 echo "==> macmon (Apple Silicon temperature, no sudo)"
 command -v macmon >/dev/null 2>&1 || brew install macmon
@@ -16,8 +16,8 @@ echo "==> SwiftBar (menu bar host)"
 
 echo "==> Installing plugin into $PLUGIN_DIR"
 mkdir -p "$PLUGIN_DIR"
-cp "$SRC" "$PLUGIN_DIR/sysclaude.5s.py"
-chmod +x "$PLUGIN_DIR/sysclaude.5s.py"
+cp "$SRC" "$PLUGIN_DIR/tally.5s.py"
+chmod +x "$PLUGIN_DIR/tally.5s.py"
 
 echo "==> Pointing SwiftBar at the plugin folder"
 defaults write com.ameba.SwiftBar PluginDirectory "$PLUGIN_DIR" || true
@@ -34,5 +34,5 @@ Done. Notes:
   claude.ai session to show plan usage. Nothing leaves your machine.
 - The Claude desktop app (or a browser logged into claude.ai) must have been
   signed in at least once, so the session cookie exists locally.
-- Change the refresh interval by renaming the file (e.g. sysclaude.10s.py).
+- Change the refresh interval by renaming the file (e.g. tally.10s.py).
 EOF

@@ -4,7 +4,7 @@ __pycache__/
 .venv/
 
 # Local runtime cache — may contain account usage data, never commit
-sysclaude_usage.json
+tally_usage.json
 *_ck
 *.cookies
 
