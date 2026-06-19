@@ -42,9 +42,9 @@ EMBER_BIN = "/opt/homebrew/bin/ember"
 
 # Ledger — anthropic-compatible proxy that sits between Claude Code and the API
 # (github.com/guames/ledger). The switch below flips Claude Code between routing
-# through the proxy and talking to Anthropic directly — a panic button for when the
-# proxy misbehaves. The lever is the `env.ANTHROPIC_BASE_URL` key in the global
-# Claude Code settings, which Claude reads on each NEW session.
+# through the proxy and talking to Anthropic directly — so if the proxy misbehaves
+# you can switch off and keep working. The lever is the `env.ANTHROPIC_BASE_URL`
+# key in the global Claude Code settings, which Claude reads on each NEW session.
 LEDGER_BIN = "/opt/homebrew/bin/ledger"
 LEDGER_HOST = os.environ.get("LEDGER_HOST", "127.0.0.1")
 LEDGER_PORT = int(os.environ.get("LEDGER_PORT", "8787"))

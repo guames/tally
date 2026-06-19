@@ -12,11 +12,11 @@ Today it ships four:
 - **System** — RAM, CPU, and **temperature**.
 - **Ember** — control a local [Ember](https://github.com/guames/ember) MLX
   inference router: see the current model, warm/unload models, open status.
-- **Ledger** — flip Claude Code between routing through the local
+- **Ledger** — a switch that flips Claude Code between routing through the local
   [Ledger](https://github.com/guames/ledger) proxy and talking to Anthropic
-  **directly**, in one click. A panic button: if the proxy misbehaves, switch to
-  Direct and your next Claude session works normally. Shows proxy on/off and
-  whether the gateway is live, and can start/stop the gateway.
+  **directly**, in one click. If the proxy misbehaves, switch to Direct and your
+  next Claude session works normally. Shows proxy on/off and whether the gateway
+  is live, and can start/stop the gateway.
 
 ```
 menu bar:   [S 17%] [W 53%]   10.4/24GB   🌡 37°

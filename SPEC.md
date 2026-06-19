@@ -23,9 +23,9 @@ Today it ships four widgets:
 2. **System** — RAM, CPU, temperature.
 3. **Ember** — control surface for a local [Ember](https://github.com/guames/ember)
    MLX inference router (current model, warm, unload).
-4. **Ledger** — switch Claude Code between the local
-   [Ledger](https://github.com/guames/ledger) proxy and Anthropic-direct (panic
-   button), with gateway start/stop.
+4. **Ledger** — a switch that flips Claude Code between the local
+   [Ledger](https://github.com/guames/ledger) proxy and Anthropic-direct, with
+   gateway start/stop.
 
 ## 2. Goals & non-goals
 
