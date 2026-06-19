@@ -73,14 +73,14 @@ Today it ships three widgets:
 
 ### 4.2 Bar rendering (`render_bar` / `_draw_bar`)
 
-- Style: neutral gray rounded track + a rounded fill pill; no border/ring; faint gloss.
-- Fill colour by **usage band** (`_palette_for`), muted/desaturated:
-  - `pct ≤ GREEN_MAX` (50) → green
-  - `pct ≤ YELLOW_MAX` (85) → yellow
-  - otherwise → red
-  - `pct is None` → gray
-- The **% font size is derived from the image height, not the pill thickness**, so
-  the pill can be slim without shrinking the number.
+- Style: a **macOS-battery glyph** — a light rounded-rectangle **outline** (no
+  battery "nub"), a neutral fill up to the % level, and the % centered inside.
+- **Monochrome** (`BATT_OUTLINE` / `BATT_FILL`) so the bars blend with the native
+  menu bar icons. **S and W look identical** — only the fill level differs; usage
+  is *not* colour-coded in the menu bar (the colour clashed with the monochrome bar).
+- The **% font size is derived from the image height, not the body thickness**, so
+  the body stays slim while the number stays readable; the % is white with a thin
+  dark stroke so it reads over both the filled and empty parts.
 - Rendered at 4× supersample, downscaled with LANCZOS; font `SFNSRounded.ttf`.
 
 ### 4.3 Dropdown
@@ -181,8 +181,10 @@ gracefully (the rest keeps working) if so.
 - Refresh cadence: the filename suffix (`tally.5s.py` = 5 s; rename to `.10s.py`, …).
 - `USAGE_TTL` (120) — max staleness of the Claude cache before a background refresh.
 - `USAGE_RETRY` (30) — min gap between refresh attempts.
-- `GREEN_MAX` (50), `YELLOW_MAX` (85) — colour band thresholds.
-- `MENUBAR_BAR_H`, `MENUBAR_PILL_H` — bar image height vs pill thickness.
+- `GREEN_MAX` (50), `YELLOW_MAX` (85) — thresholds for the **dropdown text** colour
+  (orange above 50, red above 85). The menu bar bars are monochrome.
+- `BATT_OUTLINE`, `BATT_FILL` — battery glyph colours.
+- `MENUBAR_BAR_H`, `MENUBAR_PILL_H` — bar image height vs body thickness.
 - `EMBER_URL`, `EMBER_BIN` (+ `MLX_ROUTER_HOST`/`MLX_ROUTER_PORT`).
 
 ## 10. Extensibility (adding a widget)
@@ -201,9 +203,11 @@ dropdown section. To add one:
 
 - A render completes in well under the 5 s refresh interval even when claude.ai is
   slow or unreachable (no inline network wait).
-- With Pillow present, the title is a PNG of two slim S/W bars + RAM + temp icon;
-  without Pillow, a unicode fallback renders and nothing crashes.
-- Claude band colours: ≤50 green, ≤85 yellow, >85 red.
+- With Pillow present, the title is a PNG of two identical monochrome battery-style
+  S/W bars + RAM + temp icon; without Pillow, a unicode fallback renders and
+  nothing crashes.
+- The menu bar bars are monochrome and identical in style; the dropdown Claude/RAM
+  text turns orange above 50% and red above 85%.
 - Ember submenu lists chat models only; warming one makes it show as "Current
   model" on the next refresh; unload clears it.
 - After uninstalling/clearing, no cookie or session material is left on disk.

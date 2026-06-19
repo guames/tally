@@ -17,9 +17,10 @@ Today it ships three:
 menu bar:   [S 17%] [W 53%]   10.4/24GB   🌡 37°
 ```
 
-`S` = Claude session · `W` = Claude weekly. The S/W bars are rendered as slim
-coloured pills (green ≤50%, yellow ≤85%, red above). Click the item for a full
-breakdown, plus the Ember controls.
+`S` = Claude session · `W` = Claude weekly. The S/W bars are rendered as slim,
+monochrome **battery-style glyphs** (the % inside) so they blend with the native
+menu bar icons. Click the item for a full breakdown — where the numbers turn
+orange/red as usage climbs — plus the Ember controls.
 
 > 📐 See **[SPEC.md](SPEC.md)** for the full specification (this project follows
 > specification-driven development — the spec is the source of truth).
@@ -108,9 +109,9 @@ Edit the top of `tally.5s.py`:
 
 - `USAGE_TTL` — max staleness (seconds) of the Claude cache before a background
   refresh (default 120)
-- `GREEN_MAX`, `YELLOW_MAX` — % thresholds for the green/yellow/red colour bands
-  (default 50 / 85)
-- `MENUBAR_PILL_H` — thickness of the slim bars
+- `GREEN_MAX`, `YELLOW_MAX` — % thresholds that turn the **dropdown** text orange /
+  red (default 50 / 85); the menu bar bars themselves are monochrome
+- `BATT_OUTLINE`, `BATT_FILL`, `MENUBAR_PILL_H` — look of the slim battery-style bars
 - `EMBER_URL`, `EMBER_BIN` — Ember router base URL and CLI (or set
   `MLX_ROUTER_HOST` / `MLX_ROUTER_PORT`)
 
