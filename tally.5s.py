@@ -75,8 +75,6 @@ except Exception:  # noqa: BLE001
 # Menu bar bars mimic the macOS battery glyph: a light outline + a neutral fill,
 # monochrome so they sit in with the native menu bar icons (no clashing colour,
 # no battery "nub"). S and W look identical, only the fill level differs.
-BATT_OUTLINE = (196, 196, 202)
-BATT_FILL = [(176, 176, 182), (150, 150, 156)]
 WHITE = (255, 255, 255)
 ROUND_FONT = "/System/Library/Fonts/SFNSRounded.ttf"
 
@@ -101,22 +99,20 @@ def _rmask(w, h, r):
     return m
 
 
-def _draw_bar(pct, H, W, S, bar_text, pill_h=None):
-    """macOS-battery-style glyph: a rounded outline (no nub) + a neutral fill at
-    the % level + the % centered inside. Monochrome (S and W look identical). The
-    body occupies `pill_h` (≤ H), centered; the % font is sized from the full
-    image height so the body can stay slim. Supersampled RGBA."""
+def _draw_bar(pct, H, W, S, pill_h=None):
+    """macOS-battery-style glyph rendered in pure black on transparent background.
+    Used with SwiftBar's templateImage= so macOS recolors it automatically:
+    black → foreground color (dark in light mode, white in dark mode)."""
+    BLACK = (0, 0, 0, 255)
     if pill_h is None:
         pill_h = H
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     py = (H - pill_h) // 2
-    rad = int(pill_h * 0.34)               # battery-like rounded rectangle (not a pill)
-    sw = max(2, int(pill_h * 0.11))        # outline thickness
-    # battery body — outline only, no fill, no nub
+    rad = int(pill_h * 0.34)
+    sw = max(2, int(pill_h * 0.11))
     d.rounded_rectangle([sw // 2, py + sw // 2, W - 1 - sw // 2, py + pill_h - 1 - sw // 2],
-                        radius=rad, outline=BATT_OUTLINE, width=sw)
-    # interior (inset from the outline, like the gap inside a battery)
+                        radius=rad, outline=BLACK, width=sw)
     gap = sw + max(1, S)
     ix, iy = gap, py + gap
     iw, ih = W - 2 * gap, pill_h - 2 * gap
@@ -124,22 +120,15 @@ def _draw_bar(pct, H, W, S, bar_text, pill_h=None):
     p = max(0, min(100, pct if pct is not None else 0)) / 100
     fw = int(iw * p)
     if fw > 1:
-        img.paste(_vgrad(fw, ih, BATT_FILL), (ix, iy), _rmask(fw, ih, irad))
-    # centered percentage (white, thin dark stroke so it reads over fill or empty)
-    if bar_text:
-        f = ImageFont.truetype(ROUND_FONT, int(H * 0.56))
-        tb = d.textbbox((0, 0), bar_text, font=f)
-        d.text((W / 2 - (tb[2] - tb[0]) / 2 - tb[0], H / 2 - (tb[3] - tb[1]) / 2 - tb[1]),
-               bar_text, font=f, fill=(245, 245, 247), stroke_width=max(1, S), stroke_fill=(36, 36, 40))
+        img.paste(Image.new("RGBA", (fw, ih), BLACK), (ix, iy), _rmask(fw, ih, irad))
     return img
 
 
-def render_bar(pct, *, h=34, scale=4, width=180, bar_text=None, label=None, pill_h=None):
-    """New-style pill bar; optional `label` letter (S/W) drawn to its left.
-    `pill_h` (final px) thins the pill without shrinking the %."""
+def render_bar(pct, *, h=34, scale=4, width=180, label=None, pill_h=None):
+    """Bar + optional label letter to its left, all in black (templateImage)."""
     S = scale
     H, Wb = h * S, width * S
-    bar = _draw_bar(pct, H, Wb, S, bar_text, pill_h * S if pill_h else None)
+    bar = _draw_bar(pct, H, Wb, S, pill_h * S if pill_h else None)
     if label:
         lab = int(H * 0.62)
         full = Image.new("RGBA", (lab + Wb, H), (0, 0, 0, 0))
@@ -147,7 +136,7 @@ def render_bar(pct, *, h=34, scale=4, width=180, bar_text=None, label=None, pill
         f = ImageFont.truetype(ROUND_FONT, int(H * 0.60))
         tb = d.textbbox((0, 0), label, font=f)
         d.text((lab * 0.10 - tb[0], H / 2 - (tb[3] - tb[1]) / 2 - tb[1]),
-               label, font=f, fill=(236, 236, 242), stroke_width=max(1, S // 2), stroke_fill=(0, 0, 0))
+               label, font=f, fill=(0, 0, 0, 255))
         full.alpha_composite(bar, (lab, 0))
         bar = full
     return bar.resize((bar.width // S, bar.height // S), Image.LANCZOS)
@@ -165,14 +154,13 @@ MENUBAR_PILL_H = 14  # slim pill thickness (≈10px thinner than the image)
 
 
 def menubar_image(specs):
-    """specs: list of dicts (pct + optional badge_text/bar_text/width).
-    Combines compact bars into one strip MENUBAR_H px tall, with the (shorter)
-    bars vertically centered — so they show at ~half the menu bar height."""
+    """Renders bars as a templateImage (black on transparent). SwiftBar passes
+    templateImage= to macOS which recolors it to match the current appearance."""
     parts = []
     for sp in specs:
         parts.append(render_bar(
             sp["pct"], h=MENUBAR_BAR_H, width=sp.get("width", 50), pill_h=MENUBAR_PILL_H,
-            label=sp.get("label"), bar_text=sp.get("bar_text")))
+            label=sp.get("label")))
     gap = 6
     cw = sum(p.width for p in parts) + gap * (len(parts) - 1)
     pad = (MENUBAR_H - MENUBAR_BAR_H) // 2
@@ -261,7 +249,7 @@ def fetch_usage():
         return round(v["utilization"]) if isinstance(v, dict) and v.get("utilization") is not None else None
 
     fh, sd = d.get("five_hour") or {}, d.get("seven_day") or {}
-    return {
+    result = {
         "session": util("five_hour"),
         "weekly": util("seven_day"),
         "opus": util("seven_day_opus"),
@@ -269,6 +257,14 @@ def fetch_usage():
         "session_reset": fh.get("resets_at"),
         "weekly_reset": sd.get("resets_at"),
     }
+    eu = d.get("extra_usage") or {}
+    if eu.get("utilization") is not None:
+        div = 10 ** eu.get("decimal_places", 2)
+        result["monthly_pct"] = round(eu["utilization"])
+        result["monthly_used"] = (eu.get("used_credits") or 0) / div
+        result["monthly_limit"] = (eu.get("monthly_limit") or 0) / div
+        result["monthly_currency"] = eu.get("currency", "USD")
+    return result
 
 
 def _mtime(path):
@@ -612,41 +608,60 @@ def main():
     THERMO = ":thermometer.medium:"  # flat SF Symbol (replaces the tilted 🌡️ emoji)
     ram_t = f"{ram_used:.1f}/{ram_total:.0f}GB"
     # ---- menu bar title ----
-    if u and (u.get("session") is not None or u.get("weekly") is not None):
-        s, w = u.get("session"), u.get("weekly")
+    specs = []
+    if u:
+        s, w, m = u.get("session"), u.get("weekly"), u.get("monthly_pct")
+        if s is not None:
+            specs.append({"pct": s, "label": "S", "bar_text": f"{s}%"})
+        if w is not None:
+            specs.append({"pct": w, "label": "W", "bar_text": f"{w}%"})
+        if m is not None:
+            specs.append({"pct": m, "label": "M", "bar_text": f"{m}%"})
+    if specs:
         if HAVE_PIL:
-            img = menubar_image([
-                {"pct": s, "label": "S", "bar_text": f"{s}%" if s is not None else "—"},
-                {"pct": w, "label": "W", "bar_text": f"{w}%" if w is not None else "—"},
-            ])
-            print(f"{ram_t} {THERMO}{temp_str} | image={img}")
+            img = menubar_image(specs)
+            pct_text = " ".join(sp["bar_text"] for sp in specs if sp.get("bar_text"))
+            print(f"{pct_text} {ram_t} {THERMO}{temp_str} | templateImage={img}")
         else:
-            warn = "⚠️ " if (s and s >= WARN) or (w and w >= WARN) else ""
-            sw = f"{metric(ICON_SESSION, s)}  {metric(ICON_WEEK, w)}"
-            print(f"{warn}{sw} · {ram_str} {THERMO}{temp_str}")
+            _icons = {"S": ICON_SESSION, "W": ICON_WEEK, "M": "💳"}
+            warn = "⚠️ " if any((sp.get("pct") or 0) >= WARN for sp in specs) else ""
+            bars = "  ".join(metric(_icons.get(sp["label"], ""), sp["pct"]) for sp in specs)
+            print(f"{warn}{bars} · {ram_str} {THERMO}{temp_str}")
     else:
         print(f"{ram_t} ⚙️{cpu:.0f}% {THERMO}{temp_str}")
     print("---")
 
     # ---- Claude section (hidden if the Claude desktop app isn't present) ----
     if claude_present:
-        print("Claude — Pro | size=13")
+        has_pro = bool(u and (u.get("session") is not None or u.get("weekly") is not None))
+        has_enterprise = bool(u and u.get("monthly_pct") is not None)
+        plan_label = "Enterprise" if (has_enterprise and not has_pro) else "Pro"
+        print(f"Claude — {plan_label} | size=13")
         if u:
-            s, w = u.get("session"), u.get("weekly")
-            sr, wr = fmt_reset(u.get("session_reset")), fmt_reset(u.get("weekly_reset"))
-            sv = f"{s}%" if s is not None else "—"
-            wv = f"{w}%" if w is not None else "—"
-            print(f"S  Session 5h: {sv}  ·  resets {sr} | font=Menlo"
-                  + (f" color={band_color(s)}" if band_color(s) else ""))
-            print(f"W  Weekly:    {wv}  ·  resets {wr} | font=Menlo"
-                  + (f" color={band_color(w)}" if band_color(w) else ""))
-            extra = []
-            if u.get("opus") is not None:
-                extra.append(f"Opus 7d {u['opus']}%")
-            if u.get("sonnet") is not None:
-                extra.append(f"Sonnet 7d {u['sonnet']}%")
-            if extra:
-                print("  " + "   ".join(extra) + " | font=Menlo size=11 color=gray")
+            if has_pro:
+                s, w = u.get("session"), u.get("weekly")
+                sr, wr = fmt_reset(u.get("session_reset")), fmt_reset(u.get("weekly_reset"))
+                sv = f"{s}%" if s is not None else "—"
+                wv = f"{w}%" if w is not None else "—"
+                print(f"S  Session 5h: {sv}  ·  resets {sr} | font=Menlo"
+                      + (f" color={band_color(s)}" if band_color(s) else ""))
+                print(f"W  Weekly:    {wv}  ·  resets {wr} | font=Menlo"
+                      + (f" color={band_color(w)}" if band_color(w) else ""))
+                extra = []
+                if u.get("opus") is not None:
+                    extra.append(f"Opus 7d {u['opus']}%")
+                if u.get("sonnet") is not None:
+                    extra.append(f"Sonnet 7d {u['sonnet']}%")
+                if extra:
+                    print("  " + "   ".join(extra) + " | font=Menlo size=11 color=gray")
+            if has_enterprise:
+                m = u.get("monthly_pct")
+                used = u.get("monthly_used", 0)
+                limit = u.get("monthly_limit", 0)
+                cur = u.get("monthly_currency", "USD")
+                col = band_color(m)
+                print(f"M  Monthly: {m}%  ·  ${used:.2f} / ${limit:.2f} {cur} | font=Menlo"
+                      + (f" color={col}" if col else ""))
         else:
             print("unavailable (app closed / session expired?) | color=gray")
         print("---")
