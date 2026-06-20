@@ -94,15 +94,25 @@ background worker to refresh it — so a slow claude.ai never freezes the menu b
 
 ## Install
 
+One line — no clone needed:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/guames/tally/main/install.sh | bash
+```
+
+Or from a clone:
+
 ```sh
 git clone https://github.com/guames/tally.git
 cd tally
 ./install.sh
 ```
 
-The installer sets up the Python deps, `macmon`, SwiftBar, copies the plugin,
-points SwiftBar at the plugin folder, and launches it. On first run, approve the
-Keychain prompt.
+The installer sets up the Python deps, `macmon`, SwiftBar, fetches the plugin
+(or uses your local copy when run from a clone), points SwiftBar at the plugin
+folder, and launches it. On first run, approve the Keychain prompt.
+
+> Pin a specific version with `TALLY_REF=v0.1.0` (defaults to `main`).
 
 ### Manual
 
