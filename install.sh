@@ -3,7 +3,25 @@
 set -euo pipefail
 
 PLUGIN_DIR="${TALLY_PLUGIN_DIR:-$HOME/.config/swiftbar-plugins}"
-SRC="$(cd "$(dirname "$0")" && pwd)/tally.5s.py"
+REPO="${TALLY_REPO:-guames/tally}"
+REF="${TALLY_REF:-main}"
+
+# Locate the plugin: prefer a local copy (running from a clone), otherwise
+# download it so `curl -fsSL .../install.sh | bash` works without cloning.
+# Piped to bash, $0 is "bash" and there's no local file -> we fetch instead.
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/tally.5s.py" ]; then
+  SRC="$SELF_DIR/tally.5s.py"
+  echo "==> Using local plugin ($SRC)"
+else
+  SRC="$(mktemp -t tally.5s.py)"
+  trap 'rm -f "$SRC"' EXIT
+  URL="https://raw.githubusercontent.com/$REPO/$REF/tally.5s.py"
+  echo "==> Downloading plugin from $URL"
+  curl -fsSL "$URL" -o "$SRC"
+  head -n1 "$SRC" | grep -q '^#!/usr/bin/python3' \
+    || { echo "error: downloaded plugin looks wrong (got $(head -c 64 "$SRC"))" >&2; exit 1; }
+fi
 
 echo "==> Python deps (for /usr/bin/python3)"
 /usr/bin/python3 -m pip install --user -q psutil cryptography curl_cffi Pillow
