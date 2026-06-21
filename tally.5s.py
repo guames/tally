@@ -464,6 +464,21 @@ def _ledger_up():
         return False
 
 
+def _ledger_econ():
+    """Poll the gateway's bloat signal (GET /__ledger/econ). Fail-open in every way:
+    gateway down, a stale binary that 404s the route, or bad JSON all return None.
+    Returns the EconSignal dict, or None when there's nothing worth showing — which
+    includes the gateway's own "{}" (no turn seen yet)."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(LEDGER_URL + "/__ledger/econ", timeout=0.4) as r:  # noqa: S310
+            sig = json.load(r)
+    except Exception:  # noqa: BLE001
+        return None
+    return sig if isinstance(sig, dict) and sig.get("tail_tax_est") is not None else None
+
+
 def _read_settings():
     """Parse the global Claude settings, or None if missing/unreadable.
     Never fabricate — a None means 'don't touch', so we can't corrupt the file."""
@@ -540,9 +555,14 @@ def ledger_action(verb):
         _stop_gateway()
 
 
-def ledger_section():
+_UNSET = object()
+
+
+def ledger_section(econ=_UNSET):
     """Prints the Ledger dropdown: proxy on/off + gateway up/down + toggles.
-    Hidden entirely when Ledger isn't present — CLI not installed AND gateway down."""
+    Hidden entirely when Ledger isn't present — CLI not installed AND gateway down.
+    `econ` is the bloat signal (or None); main() computes it once and passes it so we
+    don't poll the endpoint twice per refresh. When omitted we fetch it ourselves."""
     me = os.path.realpath(__file__)
     up = _ledger_up()
     if not up and not os.path.exists(LEDGER_BIN):
@@ -557,6 +577,17 @@ def ledger_section():
     # status line — green when consistent, RED when the proxy is selected but down
     if active and up:
         print(f"● Proxy ON — Claude → gateway :{LEDGER_PORT} | color=green font=Menlo")
+        # tail-tax nudge — only meaningful while traffic is actually flowing
+        if econ is _UNSET:
+            econ = _ledger_econ()
+        if econ and (econ.get("tail_tax_est") or 0) > 0:
+            tax = econ["tail_tax_est"]
+            reset = bool(econ.get("suggest_reset"))
+            col = "orange" if reset else "gray"
+            print(f"💸 Cauda cara: ~US${tax:.2f} neste turno | font=Menlo color={col}")
+            if reset:
+                prefix_k = (econ.get("prefix_tokens") or 0) // 1000
+                print(f"--→ abrir sessão NOVA poupa o prefixo ({prefix_k}k tok) | size=11 color=gray")
     elif active and not up:
         print("▲ Proxy ON but gateway DOWN — switch to Direct! | color=red font=Menlo")
     else:
@@ -607,6 +638,13 @@ def main():
     temp_str = f" {temp_one:.0f}°" if temp_one is not None else " —"
     THERMO = ":thermometer.medium:"  # flat SF Symbol (replaces the tilted 🌡️ emoji)
     ram_t = f"{ram_used:.1f}/{ram_total:.0f}GB"
+    # ---- Ledger bloat signal (polled once, shared with ledger_section below) ----
+    # Only poll while the proxy is actually carrying traffic; otherwise there's
+    # nothing to nudge about and we skip the request entirely.
+    econ = None
+    if _proxy_active(_read_settings()) and _ledger_up():
+        econ = _ledger_econ()
+    bloat = "💸 " if (econ and econ.get("suggest_reset")) else ""
     # ---- menu bar title ----
     specs = []
     if u:
@@ -621,14 +659,14 @@ def main():
         if HAVE_PIL:
             img = menubar_image(specs)
             pct_text = " ".join(sp["bar_text"] for sp in specs if sp.get("bar_text"))
-            print(f"{pct_text} {ram_t} {THERMO}{temp_str} | templateImage={img}")
+            print(f"{bloat}{pct_text} {ram_t} {THERMO}{temp_str} | templateImage={img}")
         else:
             _icons = {"S": ICON_SESSION, "W": ICON_WEEK, "M": "💳"}
             warn = "⚠️ " if any((sp.get("pct") or 0) >= WARN for sp in specs) else ""
             bars = "  ".join(metric(_icons.get(sp["label"], ""), sp["pct"]) for sp in specs)
-            print(f"{warn}{bars} · {ram_str} {THERMO}{temp_str}")
+            print(f"{bloat}{warn}{bars} · {ram_str} {THERMO}{temp_str}")
     else:
-        print(f"{ram_t} ⚙️{cpu:.0f}% {THERMO}{temp_str}")
+        print(f"{bloat}{ram_t} ⚙️{cpu:.0f}% {THERMO}{temp_str}")
     print("---")
 
     # ---- Claude section (hidden if the Claude desktop app isn't present) ----
@@ -681,7 +719,7 @@ def main():
     ember_section()
 
     # ---- Ledger section ----
-    ledger_section()
+    ledger_section(econ=econ)
 
     print("---")
     if claude_present:
