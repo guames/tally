@@ -1,11 +1,11 @@
 # Tally — Specification
 
 > Specification-Driven Development (SDD): this document is the **source of truth**
-> for what Tally does. Code in `tally.5s.py` implements this spec; when behaviour
+> for what Tally does. Code in `tally.15s.py` implements this spec; when behaviour
 > and spec disagree, one of them is a bug. Keep this file in sync with changes.
 
 - **Status:** living spec
-- **Component:** single SwiftBar plugin (`tally.5s.py`)
+- **Component:** single SwiftBar plugin (`tally.15s.py`)
 - **Target:** macOS on Apple Silicon
 - **License:** MIT
 
@@ -44,12 +44,12 @@ Today it ships four widgets:
 ## 3. Architecture
 
 - **Host:** [SwiftBar](https://github.com/swiftbar/SwiftBar). SwiftBar runs the
-  script on an interval encoded in the filename (`tally.5s.py` ⇒ every 5 s) and
+  script on an interval encoded in the filename (`tally.15s.py` ⇒ every 15 s) and
   renders its stdout (SwiftBar plugin format) as the menu bar item + dropdown.
 - **Single process per render.** All widgets render in one script invocation, so
   any slow/blocking call freezes the whole UI — hence the non-blocking rules in §7.
 - **Self-invocation for actions.** Interactive dropdown items run
-  `bash=<abs path to tally.5s.py> param1=<verb> …`. A guard in `__main__`
+  `bash=<abs path to tally.15s.py> param1=<verb> …`. A guard in `__main__`
   detects the leading argument, performs the action, and exits **without**
   printing a menu. Verbs:
   - `fetch-usage` → refresh the Claude cache (background worker).
@@ -209,7 +209,7 @@ gracefully (the rest keeps working) if so.
 - A lock file (`/tmp/tally_fetch.lock`) throttles refresh attempts to at most one
   per `USAGE_RETRY` (30 s), even when the fetch keeps failing.
 - The background worker writes `/tmp/tally_usage.json` atomically (temp + rename).
-- System metrics (psutil/macmon) are cheap and run inline every 5 s.
+- System metrics (psutil/macmon) are cheap and run inline every 15 s.
 
 ## 8. Privacy & security (requirements)
 
@@ -227,7 +227,7 @@ gracefully (the rest keeps working) if so.
 
 ## 9. Configuration
 
-- Refresh cadence: the filename suffix (`tally.5s.py` = 5 s; rename to `.10s.py`, …).
+- Refresh cadence: the filename suffix (`tally.15s.py` = 15 s; rename to `.5s.py`, …).
 - `USAGE_TTL` (120) — max staleness of the Claude cache before a background refresh.
 - `USAGE_RETRY` (30) — min gap between refresh attempts.
 - `GREEN_MAX` (50), `YELLOW_MAX` (85) — thresholds for the **dropdown text** colour

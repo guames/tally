@@ -120,14 +120,14 @@ folder, and launches it. On first run, approve the Keychain prompt.
 /usr/bin/python3 -m pip install --user psutil cryptography curl_cffi Pillow
 brew install macmon
 brew install --cask swiftbar
-cp tally.5s.py ~/.config/swiftbar-plugins/
+cp tally.15s.py ~/.config/swiftbar-plugins/
 defaults write com.ameba.SwiftBar PluginDirectory "$HOME/.config/swiftbar-plugins"
 open -a SwiftBar
 ```
 
 ## Configuration
 
-Edit the top of `tally.5s.py`:
+Edit the top of `tally.15s.py`:
 
 - `USAGE_TTL` — max staleness (seconds) of the Claude cache before a background
   refresh (default 120)
@@ -137,8 +137,8 @@ Edit the top of `tally.5s.py`:
 - `EMBER_URL`, `EMBER_BIN` — Ember router base URL and CLI (or set
   `MLX_ROUTER_HOST` / `MLX_ROUTER_PORT`)
 
-The whole widget's refresh cadence is encoded in the filename: `tally.5s.py` =
-every 5 s. Rename to `.10s.py`, `.30s.py`, etc.
+The whole widget's refresh cadence is encoded in the filename: `tally.15s.py` =
+every 15 s. Rename to `.5s.py`, `.30s.py`, etc.
 
 Without `Pillow`, the menu bar falls back to a plain-text/unicode bar — everything
 else still works.
@@ -155,7 +155,7 @@ else still works.
 - **Ember section says "router offline"** — start your router (`ember serve`, or
   your `mlx_router.py`); Tally reads it over HTTP on `127.0.0.1:8000`.
 - **Nothing in the menu bar** — open SwiftBar and confirm the plugin folder is set
-  to where `tally.5s.py` lives. After editing the script, a full SwiftBar restart
+  to where `tally.15s.py` lives. After editing the script, a full SwiftBar restart
   (`killall SwiftBar; open -a SwiftBar`) reloads it reliably.
 
 ## Contributing
