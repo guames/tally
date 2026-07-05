@@ -209,7 +209,18 @@ gracefully (the rest keeps working) if so.
 - A lock file (`/tmp/tally_fetch.lock`) throttles refresh attempts to at most one
   per `USAGE_RETRY` (30 s), even when the fetch keeps failing.
 - The background worker writes `/tmp/tally_usage.json` atomically (temp + rename).
-- System metrics (psutil/macmon) are cheap and run inline every 15 s.
+- System metrics run inline but never sample-block:
+  - Temperature comes from a /tmp cache (`TEMP_TTL`, 60 s) — one macmon sample
+    costs ~1.9 s of fixed startup, by far the most expensive part of a refresh,
+    and temperature doesn't need 15 s granularity. Failures are cached too
+    (throttles a broken macmon to the same pace).
+  - CPU % is the `psutil.cpu_times()` delta persisted between consecutive runs
+    (`/tmp/tally_cpu.json`) — the true average over the refresh window, with no
+    `cpu_percent(interval=…)` sleep. First run falls back to a 0.1 s sample.
+- The menu bar PNG is only re-rendered when a percentage changes; the last image
+  is cached in `/tmp/tally_bar.json` keyed by the bar specs.
+- Ember's `/v1/models` list is cached for `MODELS_TTL` (300 s); router failures
+  fall back to the stale cache rather than hiding the submenu.
 
 ## 8. Privacy & security (requirements)
 
@@ -230,6 +241,8 @@ gracefully (the rest keeps working) if so.
 - Refresh cadence: the filename suffix (`tally.15s.py` = 15 s; rename to `.5s.py`, …).
 - `USAGE_TTL` (120) — max staleness of the Claude cache before a background refresh.
 - `USAGE_RETRY` (30) — min gap between refresh attempts.
+- `TEMP_TTL` (60) — max staleness of the macmon temperature cache.
+- `MODELS_TTL` (300) — max staleness of the Ember model-list cache.
 - `GREEN_MAX` (50), `YELLOW_MAX` (85) — thresholds for the **dropdown text** colour
   (orange above 50, red above 85). The menu bar bars are monochrome.
 - `BATT_OUTLINE`, `BATT_FILL` — battery glyph colours.
