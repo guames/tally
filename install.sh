@@ -10,13 +10,13 @@ REF="${TALLY_REF:-main}"
 # download it so `curl -fsSL .../install.sh | bash` works without cloning.
 # Piped to bash, $0 is "bash" and there's no local file -> we fetch instead.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
-if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/tally.5s.py" ]; then
-  SRC="$SELF_DIR/tally.5s.py"
+if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/tally.15s.py" ]; then
+  SRC="$SELF_DIR/tally.15s.py"
   echo "==> Using local plugin ($SRC)"
 else
-  SRC="$(mktemp -t tally.5s.py)"
+  SRC="$(mktemp -t tally.15s.py)"
   trap 'rm -f "$SRC"' EXIT
-  URL="https://raw.githubusercontent.com/$REPO/$REF/tally.5s.py"
+  URL="https://raw.githubusercontent.com/$REPO/$REF/tally.15s.py"
   echo "==> Downloading plugin from $URL"
   curl -fsSL "$URL" -o "$SRC"
   head -n1 "$SRC" | grep -q '^#!/usr/bin/python3' \
@@ -34,8 +34,8 @@ echo "==> SwiftBar (menu bar host)"
 
 echo "==> Installing plugin into $PLUGIN_DIR"
 mkdir -p "$PLUGIN_DIR"
-cp "$SRC" "$PLUGIN_DIR/tally.5s.py"
-chmod +x "$PLUGIN_DIR/tally.5s.py"
+cp "$SRC" "$PLUGIN_DIR/tally.15s.py"
+chmod +x "$PLUGIN_DIR/tally.15s.py"
 
 echo "==> Pointing SwiftBar at the plugin folder"
 defaults write com.ameba.SwiftBar PluginDirectory "$PLUGIN_DIR" || true
