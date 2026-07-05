@@ -34,6 +34,12 @@ USAGE_CACHE = "/tmp/tally_usage.json"
 USAGE_LOCK = "/tmp/tally_fetch.lock"  # throttles background refreshes
 USAGE_TTL = 120  # s — how stale the Claude cache may get before a bg refresh
 USAGE_RETRY = 30  # s — min gap between background refresh attempts (even on failure)
+TEMP_CACHE = "/tmp/tally_temp.json"
+TEMP_TTL = 60  # s — macmon has ~1.9s of fixed startup cost per sample (87% of a refresh)
+CPU_STATE = "/tmp/tally_cpu.json"  # cpu_times snapshot from the previous run
+BAR_CACHE = "/tmp/tally_bar.json"  # last rendered menu bar PNG, keyed by its specs
+MODELS_CACHE = "/tmp/tally_ember_models.json"
+MODELS_TTL = 300  # s — the router's model list almost never changes
 WARN, CRIT = 80, 92  # % thresholds for color
 
 # Ember — local OpenAI-compatible MLX router (github.com/guames/ember)
@@ -151,6 +157,28 @@ def _b64(img):
 MENUBAR_H = 44       # total strip height (px) — SwiftBar caps the title image
 MENUBAR_BAR_H = 24   # per-bar image height (drives the % font size)
 MENUBAR_PILL_H = 14  # slim pill thickness (≈10px thinner than the image)
+
+
+def menubar_image_cached(specs):
+    """The bars only change when a percentage changes (usage cache updates every
+    ≥120s), so reuse the last PNG instead of re-rendering (4x supersample +
+    LANCZOS) on every 15s refresh."""
+    key = [[sp.get("label"), sp.get("pct"), sp.get("width", 50)] for sp in specs]
+    key.append([MENUBAR_H, MENUBAR_BAR_H, MENUBAR_PILL_H])
+    try:
+        with open(BAR_CACHE) as f:
+            c = json.load(f)
+        if c.get("key") == key and c.get("b64"):
+            return c["b64"]
+    except Exception:  # noqa: BLE001
+        pass
+    b64 = menubar_image(specs)
+    try:
+        with open(BAR_CACHE, "w") as f:
+            json.dump({"key": key, "b64": b64}, f)
+    except Exception:  # noqa: BLE001
+        pass
+    return b64
 
 
 def menubar_image(specs):
@@ -372,15 +400,63 @@ def vbar(pct):
 
 # ---------------------------------------------------------------- system
 def macmon_temp():
+    """Temperature via macmon, cached in /tmp for TEMP_TTL. One macmon sample
+    costs ~1.9s wall (fixed startup, flag tuning doesn't help) — by far the most
+    expensive part of a refresh — and temperature doesn't move that fast. Failures
+    are cached too, so a broken macmon is retried at the same throttled pace."""
+    try:
+        with open(TEMP_CACHE) as f:
+            c = json.load(f)
+        if time.time() - c.get("ts", 0) < TEMP_TTL:
+            return c.get("cpu"), c.get("gpu")
+    except Exception:  # noqa: BLE001
+        pass
+    cpu_t = gpu_t = None
     try:
         r = subprocess.run(
             ["/opt/homebrew/bin/macmon", "pipe", "-s", "1", "-i", "200"],
             capture_output=True, text=True, timeout=5,
         )
         t = json.loads(r.stdout).get("temp", {})
-        return t.get("cpu_temp_avg"), t.get("gpu_temp_avg")
+        cpu_t, gpu_t = t.get("cpu_temp_avg"), t.get("gpu_temp_avg")
     except Exception:  # noqa: BLE001
-        return None, None
+        pass
+    try:
+        with open(TEMP_CACHE, "w") as f:
+            json.dump({"ts": time.time(), "cpu": cpu_t, "gpu": gpu_t}, f)
+    except Exception:  # noqa: BLE001
+        pass
+    return cpu_t, gpu_t
+
+
+def cpu_percent_between_runs():
+    """CPU% averaged over the window since the previous refresh, via a persisted
+    psutil.cpu_times() snapshot. A fresh process can't sample without blocking
+    (cpu_percent(interval=N) sleeps N seconds); the inter-run delta is free and a
+    better signal — the true 15s average instead of a 0.3s peek."""
+    import psutil
+
+    cur = psutil.cpu_times()
+    total = sum(cur)
+    busy = total - cur.idle
+    pct = None
+    try:
+        with open(CPU_STATE) as f:
+            prev = json.load(f)
+        dt = total - prev["total"]
+        db = busy - prev["busy"]
+        if dt >= 1.0 and 0 <= db <= dt:  # guard: reboot, clock weirdness, re-runs <1s apart
+            pct = 100.0 * db / dt
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        with open(CPU_STATE, "w") as f:
+            json.dump({"total": total, "busy": busy}, f)
+    except Exception:  # noqa: BLE001
+        pass
+    if pct is None:  # first run (or guard tripped): short inline sample
+        pct = psutil.cpu_percent(interval=0.1)
+    return pct
 
 
 # ---------------------------------------------------------------- Ember router
@@ -403,6 +479,30 @@ def _ember_post(path, body, timeout=180):
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
         return json.load(r)
+
+
+def _ember_chat_models():
+    """Chat-capable model ids from /v1/models, cached for MODELS_TTL — the list
+    only changes when the router config does. Only successes are cached; while the
+    router is unreachable we fall through to the (stale) cache rather than none."""
+    try:
+        with open(MODELS_CACHE) as f:
+            c = json.load(f)
+        if time.time() - c.get("ts", 0) < MODELS_TTL:
+            return c.get("models")
+    except Exception:  # noqa: BLE001
+        c = None
+    models = _ember_get("/v1/models")
+    if models is None:
+        return c.get("models") if isinstance(c, dict) else None
+    chat = [m["id"] for m in models.get("data", [])
+            if not any(x in m["id"] for x in ("autocomplete", "embed"))]
+    try:
+        with open(MODELS_CACHE, "w") as f:
+            json.dump({"ts": time.time(), "models": chat}, f)
+    except Exception:  # noqa: BLE001
+        pass
+    return chat
 
 
 def ember_action(verb, arg):
@@ -437,11 +537,9 @@ def ember_section():
     else:
         print("Current model: none (cold) | color=gray font=Menlo")
 
-    models = _ember_get("/v1/models")
+    chat = _ember_chat_models()
     hotset = {c["name"] for c in hot}
-    if models:
-        chat = [m["id"] for m in models.get("data", [])
-                if not any(x in m["id"] for x in ("autocomplete", "embed"))]
+    if chat:
         print("Warm model | size=12")
         for name in chat:
             mark = "●" if name in hotset else "○"
@@ -625,7 +723,7 @@ def main():
     ram_used = (vm.total - vm.available) / 1024**3
     ram_total = vm.total / 1024**3
     ram_str = f"{ICON_RAM} {vbar(ram_pct)} {ram_used:.1f}/{ram_total:.0f}GB"  # usado/total
-    cpu = psutil.cpu_percent(interval=0.3)
+    cpu = cpu_percent_between_runs()
     cpu_t, gpu_t = macmon_temp()
     # Hide a widget entirely when its tool isn't present (rather than show an
     # "unavailable" placeholder). Claude = the desktop app's cookie store exists.
@@ -657,7 +755,7 @@ def main():
             specs.append({"pct": m, "label": "M", "bar_text": f"{m}%"})
     if specs:
         if HAVE_PIL:
-            img = menubar_image(specs)
+            img = menubar_image_cached(specs)
             pct_text = " ".join(sp["bar_text"] for sp in specs if sp.get("bar_text"))
             print(f"{bloat}{pct_text} {ram_t} {THERMO}{temp_str} | templateImage={img}")
         else:
