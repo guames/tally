@@ -72,7 +72,7 @@ VBLOCKS = "▁▂▃▄▅▆▇█"                             # vertical bar:
 try:
     import base64
     import io
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageChops, ImageDraw, ImageFont
 
     HAVE_PIL = True
 except Exception:  # noqa: BLE001
@@ -105,10 +105,12 @@ def _rmask(w, h, r):
     return m
 
 
-def _draw_bar(pct, H, W, S, pill_h=None):
+def _draw_bar(pct, H, W, S, bar_text=None, pill_h=None):
     """macOS-battery-style glyph rendered in pure black on transparent background.
     Used with SwiftBar's templateImage= so macOS recolors it automatically:
-    black → foreground color (dark in light mode, white in dark mode)."""
+    black → foreground color (dark in light mode, white in dark mode).
+    If `bar_text` is given, the % is knocked *out* of the glyph (transparent
+    digits) so it stays legible over both the filled and empty portions."""
     BLACK = (0, 0, 0, 255)
     if pill_h is None:
         pill_h = H
@@ -127,14 +129,26 @@ def _draw_bar(pct, H, W, S, pill_h=None):
     fw = int(iw * p)
     if fw > 1:
         img.paste(Image.new("RGBA", (fw, ih), BLACK), (ix, iy), _rmask(fw, ih, irad))
+    # % knocked out of the glyph: XOR the digit shape with the current coverage,
+    # so digits read as holes over the fill and as solid over the empty track.
+    if bar_text:
+        f = ImageFont.truetype(ROUND_FONT, int(pill_h * 0.82))
+        tmask = Image.new("L", (W, H), 0)
+        dm = ImageDraw.Draw(tmask)
+        tb = dm.textbbox((0, 0), bar_text, font=f)
+        dm.text((W / 2 - (tb[2] - tb[0]) / 2 - tb[0], H / 2 - (tb[3] - tb[1]) / 2 - tb[1]),
+                bar_text, font=f, fill=255)
+        alpha = img.getchannel("A")
+        img.putalpha(Image.composite(ImageChops.invert(alpha), alpha, tmask))
     return img
 
 
-def render_bar(pct, *, h=34, scale=4, width=180, label=None, pill_h=None):
-    """Bar + optional label letter to its left, all in black (templateImage)."""
+def render_bar(pct, *, h=34, scale=4, width=180, bar_text=None, label=None, pill_h=None):
+    """Bar (with the % knocked out inside) + optional label letter to its left,
+    all in black (templateImage)."""
     S = scale
     H, Wb = h * S, width * S
-    bar = _draw_bar(pct, H, Wb, S, pill_h * S if pill_h else None)
+    bar = _draw_bar(pct, H, Wb, S, bar_text=bar_text, pill_h=pill_h * S if pill_h else None)
     if label:
         lab = int(H * 0.62)
         full = Image.new("RGBA", (lab + Wb, H), (0, 0, 0, 0))
@@ -163,8 +177,8 @@ def menubar_image_cached(specs):
     """The bars only change when a percentage changes (usage cache updates every
     ≥120s), so reuse the last PNG instead of re-rendering (4x supersample +
     LANCZOS) on every 15s refresh."""
-    key = [[sp.get("label"), sp.get("pct"), sp.get("width", 50)] for sp in specs]
-    key.append([MENUBAR_H, MENUBAR_BAR_H, MENUBAR_PILL_H])
+    key = [[sp.get("label"), sp.get("pct"), sp.get("bar_text"), sp.get("width", 50)] for sp in specs]
+    key.append([MENUBAR_H, MENUBAR_BAR_H, MENUBAR_PILL_H, "pct-knockout"])
     try:
         with open(BAR_CACHE) as f:
             c = json.load(f)
@@ -188,7 +202,7 @@ def menubar_image(specs):
     for sp in specs:
         parts.append(render_bar(
             sp["pct"], h=MENUBAR_BAR_H, width=sp.get("width", 50), pill_h=MENUBAR_PILL_H,
-            label=sp.get("label")))
+            label=sp.get("label"), bar_text=sp.get("bar_text")))
     gap = 6
     cw = sum(p.width for p in parts) + gap * (len(parts) - 1)
     pad = (MENUBAR_H - MENUBAR_BAR_H) // 2
@@ -756,8 +770,7 @@ def main():
     if specs:
         if HAVE_PIL:
             img = menubar_image_cached(specs)
-            pct_text = " ".join(sp["bar_text"] for sp in specs if sp.get("bar_text"))
-            print(f"{bloat}{pct_text} {ram_t} {THERMO}{temp_str} | templateImage={img}")
+            print(f"{bloat}{ram_t} {THERMO}{temp_str} | templateImage={img}")
         else:
             _icons = {"S": ICON_SESSION, "W": ICON_WEEK, "M": "💳"}
             warn = "⚠️ " if any((sp.get("pct") or 0) >= WARN for sp in specs) else ""
