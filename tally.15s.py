@@ -40,6 +40,8 @@ CPU_STATE = "/tmp/tally_cpu.json"  # cpu_times snapshot from the previous run
 BAR_CACHE = "/tmp/tally_bar.json"  # last rendered menu bar PNG, keyed by its specs
 MODELS_CACHE = "/tmp/tally_ember_models.json"
 MODELS_TTL = 300  # s — the router's model list almost never changes
+WARMING_MARK = "/tmp/tally_warming.json"  # {name, ts} while a detached warm is in flight
+WARMING_TTL = 240  # s — a warm that outlives this is assumed dead (marker self-expires)
 WARN, CRIT = 80, 92  # % thresholds for color
 
 # Ember — local OpenAI-compatible MLX router (github.com/guames/ember)
@@ -519,11 +521,47 @@ def _ember_chat_models():
     return chat
 
 
+def _read_warming():
+    """Model name with a warm in flight, or None (marker missing/expired)."""
+    try:
+        with open(WARMING_MARK) as f:
+            m = json.load(f)
+        if time.time() - m.get("ts", 0) < WARMING_TTL:
+            return m.get("name")
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _clear_warming(name):
+    """Remove the marker, but only if it's still ours — a second click on another
+    model overwrites the marker, and the first warm finishing must not clear it."""
+    if _read_warming() == name:
+        try:
+            os.remove(WARMING_MARK)
+        except OSError:
+            pass
+
+
 def ember_action(verb, arg):
     """Run an action against the router (used when SwiftBar invokes us with args)."""
     if verb == "warm":
-        _ember_post("/v1/chat/completions",
-                    {"model": arg, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1})
+        # Return immediately: mark the warm and hand the blocking load to a
+        # detached child, so the very next 15s refresh shows "warming…" instead
+        # of a dead-looking click (a 15GB model takes 30-60s+ to load).
+        with open(WARMING_MARK, "w") as f:
+            json.dump({"name": arg, "ts": time.time()}, f)
+        subprocess.Popen(
+            [sys.executable, os.path.realpath(__file__), "ember", "do-warm", arg],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    elif verb == "do-warm":
+        try:
+            _ember_post("/v1/chat/completions",
+                        {"model": arg, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1})
+        finally:
+            _clear_warming(arg)
     elif verb == "unload":
         _ember_post("/unload", {"target": arg or "chat"})
     elif verb == "clear":
@@ -544,19 +582,24 @@ def ember_section():
         print(f"Start (ember serve) | bash={EMBER_BIN} param1=serve terminal=true")
         return
     hot = st.get("loaded", {}).get("chat", [])
+    hotset = {c["name"] for c in hot}
+    warming = _read_warming()
+    if warming in hotset:
+        warming = None  # load finished; the marker just hasn't been cleared yet
     if hot:
         for c in hot:
             idle = _dur(c.get("idle_s"))
             print(f"Current model: {c['name']}  ({c['size_gb']:.1f}G · idle {idle}) | color=green font=Menlo")
     else:
         print("Current model: none (cold) | color=gray font=Menlo")
+    if warming:
+        print(f"◌ warming {warming}… | color=orange font=Menlo")
 
     chat = _ember_chat_models()
-    hotset = {c["name"] for c in hot}
     if chat:
         print("Warm model | size=12")
         for name in chat:
-            mark = "●" if name in hotset else "○"
+            mark = "●" if name in hotset else ("◌" if name == warming else "○")
             print(f"--{mark} {name} | bash=\"{me}\" param1=ember param2=warm param3={name} terminal=false refresh=true")
     print("Actions | size=12")
     print(f"--Unload chat | bash=\"{me}\" param1=ember param2=unload param3=chat terminal=false refresh=true")

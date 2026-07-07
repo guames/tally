@@ -129,7 +129,14 @@ All dropdown text is **English**.
 - **Current model:** the hot chat model(s) from `GET /status` → `loaded.chat`
   (name, size, idle), green; `none (cold)` if none are loaded.
 - **Warm model** submenu: every chat model from `GET /v1/models`
-  (excluding `autocomplete`/`embed`), marked ● hot / ○ cold. Clicking warms it.
+  (excluding `autocomplete`/`embed`), marked ● hot / ◌ warming / ○ cold.
+  Clicking warms it.
+- **Warming feedback:** a warm in flight shows `◌ warming <model>…` (orange)
+  under Current model. State lives in `/tmp/tally_warming.json` (`{name, ts}`),
+  written by the click, cleared by the detached loader when the POST returns,
+  and self-expiring after `WARMING_TTL` (240 s) so a crashed warm can't leave a
+  stuck indicator. The line is suppressed as soon as the model appears hot in
+  `/status`.
 - **Actions** submenu: `Unload chat`, `Unload all`.
 - `Status in terminal` runs `ember status` in Terminal.
 - Router base URL: `EMBER_URL` (default `http://127.0.0.1:8000`, override via
@@ -137,7 +144,12 @@ All dropdown text is **English**.
 
 ### 4.5 Ember actions (`ember_action`)
 
-- `warm <model>` → `POST /v1/chat/completions` with `max_tokens: 1` (loads it).
+- `warm <model>` → writes the warming marker and spawns a detached `do-warm`
+  child, returning immediately (a 15 GB model takes 30–60 s+ to load; a blocking
+  click looks dead and invites a second click that evicts the first load).
+- `do-warm <model>` → the child: `POST /v1/chat/completions` with
+  `max_tokens: 1` (loads it), then clears the marker (only if still its own —
+  a newer click on another model overwrites it).
 - `unload <chat|all|name>` → `POST /unload`.
 - (`clear` is implemented but omitted from the menu while the production router is
   the bench `mlx_router.py`, which lacks `/clear`. Re-enable under `ember serve`.)
