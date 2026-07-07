@@ -557,10 +557,10 @@ def ember_section():
         print("Warm model | size=12")
         for name in chat:
             mark = "●" if name in hotset else "○"
-            print(f"--{mark} {name} | bash={me} param1=ember param2=warm param3={name} terminal=false refresh=true")
+            print(f"--{mark} {name} | bash=\"{me}\" param1=ember param2=warm param3={name} terminal=false refresh=true")
     print("Actions | size=12")
-    print(f"--Unload chat | bash={me} param1=ember param2=unload param3=chat terminal=false refresh=true")
-    print(f"--Unload all | bash={me} param1=ember param2=unload param3=all terminal=false refresh=true")
+    print(f"--Unload chat | bash=\"{me}\" param1=ember param2=unload param3=chat terminal=false refresh=true")
+    print(f"--Unload all | bash=\"{me}\" param1=ember param2=unload param3=all terminal=false refresh=true")
     print(f"Status in terminal | bash={EMBER_BIN} param1=status terminal=true")
 
 
@@ -706,16 +706,16 @@ def ledger_section(econ=_UNSET):
         print("○ Direct — Claude → Anthropic | color=gray font=Menlo")
     # the switch (one-click; switching to proxy also starts the gateway if needed)
     if active:
-        print(f"Switch to DIRECT (bypass proxy) | bash={me} param1=ledger param2=direct "
+        print(f"Switch to DIRECT (bypass proxy) | bash=\"{me}\" param1=ledger param2=direct "
               "terminal=false refresh=true")
     else:
-        print(f"Switch to PROXY (via gateway) | bash={me} param1=ledger param2=proxy "
+        print(f"Switch to PROXY (via gateway) | bash=\"{me}\" param1=ledger param2=proxy "
               "terminal=false refresh=true")
     # gateway process control (sibling of the switch)
     if up:
-        print(f"Stop gateway | bash={me} param1=ledger param2=stop terminal=false refresh=true")
+        print(f"Stop gateway | bash=\"{me}\" param1=ledger param2=stop terminal=false refresh=true")
     else:
-        print(f"Start gateway | bash={me} param1=ledger param2=start terminal=false refresh=true")
+        print(f"Start gateway | bash=\"{me}\" param1=ledger param2=start terminal=false refresh=true")
     print("Takes effect in NEW Claude sessions | size=11 color=gray")
 
 
