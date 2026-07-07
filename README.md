@@ -143,6 +143,22 @@ every 15 s. Rename to `.5s.py`, `.30s.py`, etc.
 Without `Pillow`, the menu bar falls back to a plain-text/unicode bar — everything
 else still works.
 
+## Web dashboard (optional)
+
+`tally_server.py` serves the same data as an auto-refreshing HTML page on the
+LAN (plus `/data` for raw JSON) — handy for a phone or a second machine:
+
+```bash
+python3 tally_server.py           # http://<your-mac>:8080/
+python3 tally_server.py 9090      # custom port
+```
+
+It reuses the plugin's `/tmp/tally_usage.json` cache and only fetches from
+claude.ai itself when that cache goes stale. Note it binds `0.0.0.0` with no
+auth — anyone on your LAN can see the dashboard; keep it off untrusted networks.
+To run it at login, install a LaunchAgent pointing `/usr/bin/python3` at the
+script (see the header of `tally_server.py`).
+
 ## Troubleshooting
 
 - **Claude section says "unavailable"** — make sure the Claude desktop app has been
